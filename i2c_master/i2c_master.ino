@@ -149,12 +149,10 @@ void loop() {
     case MODE_IDLE: {
       if (startBtnPressed) {
         currentMode = MODE_INTRO;
-//        Serial.print("go to intro mode -> ");
-//        Serial.println(currentMode);
       }
       break;
     }
-    case MODE_INTRO:
+    case MODE_INTRO: {
       Serial.println("INTRO_MODE ENTERED");
       // starts playing audio and listens to input
       audio.play("preview.wav");
@@ -207,6 +205,7 @@ void loop() {
         }
       }
       break;
+    }
     case MODE_REPLAY: {
       Serial.println("ENTERRING REPLAY MODE");
       audio.play("preview.wav");
@@ -393,12 +392,69 @@ void loop() {
           // give the opportunity to pause?
         }
 
-        // when time runs out, go to record mode
+        // when time runs out, go to outro mode
         currentMode = MODE_OUTRO;
-
         break;  
       }
 
+      case MODE_OUTRO:{
+        // starts playing audio and listens to input
+        Serial.println("OUTRO MODE ENTERRED");
+        audio.play("preview.wav");
+        while (!pauseBtnPressed || !skipBtnPressed) {
+          // Button input management
+          // PLAY/PAUSE BTN management
+          pauseBtnPressed = false;
+          pauseBtnState = digitalRead(PAUSEBTN);
+          if (pauseBtnState != pauseBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+            pauseBtnPressed = pauseBtnState == HIGH;
+            pauseBtnPrevState = pauseBtnState;
+          } 
+          
+          if (pauseBtnPressed) {
+            Serial.println("pause button pressed");
+          }
+        
+          // SKIP BTN management
+          skipBtnPressed = false;
+          skipBtnState = digitalRead(SKIPBTN);
+          if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+            skipBtnPressed = skipBtnState == HIGH;
+            skipBtnPrevState = skipBtnState;
+          } 
+  
+          // if pause is pressed, pause audio
+          if (pauseBtnPressed) {
+            Serial.println("PAUSEBTN btn pressed");
+            audio.pause();
+            while (!pauseBtnPressed);
+            delay(200);
+          }
+  
+          // if skip is pressed, go to next mode
+          if (skipBtnPressed) {
+            Serial.println("SKIPBTN btn pressed");
+            audio.disable();
+            while (!skipBtnPressed);
+            currentMode = MODE_REPLAY;
+            delay(200);
+            break;
+          }
+  
+          // when the intro audio finishes playing
+          if (!audio.isPlaying()) {
+            Serial.println("audio is finished, time to switch modes");
+            currentMode = MODE_FUTURE;
+            delay(200);
+            break;
+          }
+        }
+      break;
+    }
+
+    case MODE_FUTURE: {
+      break;
+    }
   }
 }
 
