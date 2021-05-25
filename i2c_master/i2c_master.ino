@@ -9,6 +9,9 @@
 #include <pcmConfig.h>
 #include <TMRpcm.h>
 
+// functions
+uint16_t calculateTime(int hours, int minutes, int seconds);
+
 // I2C
 #define SLAVE_ADDR 9
 
@@ -45,12 +48,13 @@ char const past[] = "samplepast2.wav";
 int setupHours = 0;
 int setupMinutes = 0;
 int setupSeconds = 0;
-//time_t setupTime;
+int totalTime = 0;
 
 int currentHours = 0;
 int currentMinutes = 0;
 int currentSeconds = 0;
-//time_t currentTime = 0;
+uint16_t timeLeft = calculateTime(setupHours, setupMinutes, setupSeconds); // convert setup time to seconds
+uint32_t lastTime = 0; //tto help with counting seconds
 
 // rotary encoder
 #define inputCLK 5
@@ -67,7 +71,7 @@ const int MODE_IDLE = 0; //before the start
 const int MODE_INTRO = 1; //host talks and replays
 const int MODE_REPLAY = 2; //replays past hope
 const int MODE_TALK_SETUP = 3; //user talks about their day
-const int MODE_TALK = 4;
+const int MODE_TALK = 4; 
 const int MODE_OUTRO = 5; //user closes the show
 const int MODE_FUTURE = 6; //records
 int currentMode = MODE_IDLE;
@@ -129,7 +133,7 @@ void loop() {
   } 
   
   if (pauseBtnPressed) {
-    Serial.println("pause button pressed");
+    Serial.println("pause button pressed IN SETUP");
   }
 
   // SKIP BTN management
@@ -142,13 +146,14 @@ void loop() {
 
 
   switch (currentMode) {
-    case MODE_IDLE:
+    case MODE_IDLE: {
       if (startBtnPressed) {
         currentMode = MODE_INTRO;
 //        Serial.print("go to intro mode -> ");
 //        Serial.println(currentMode);
       }
       break;
+    }
     case MODE_INTRO:
       Serial.println("INTRO_MODE ENTERED");
       // starts playing audio and listens to input
@@ -202,7 +207,7 @@ void loop() {
         }
       }
       break;
-    case MODE_REPLAY:
+    case MODE_REPLAY: {
       Serial.println("ENTERRING REPLAY MODE");
       audio.play("preview.wav");
       while (!pauseBtnPressed || !skipBtnPressed) {
@@ -255,7 +260,8 @@ void loop() {
         }
       }
       break;
-    case MODE_TALK_SETUP:
+      }
+    case MODE_TALK_SETUP: {
 //      Serial.println("TALK MODE");
       // read current state of inputCLK
       curStateCLK = digitalRead(inputCLK);
@@ -267,6 +273,9 @@ void loop() {
           if (timePart == 0) {
             // hours
             setupHours++;
+            if (setupHours > 24) {
+              setupHours = 0;
+            }
           }
           else if (timePart == 1) {
             // minutes
@@ -323,9 +332,9 @@ void loop() {
       prevStateCLK = curStateCLK;
 
       // read btnState
-      int btnState = digitalRead(inputSW);
+      int swState = digitalRead(inputSW);
       // if we detect LOW, the button is pressed
-      if (btnState == LOW) {
+      if (swState == LOW) {
         // if 50ms has passed since low, means that the button is pressed and released again
         if (millis() - lastButtonPress > 50) {
           timePart++;
@@ -337,10 +346,82 @@ void loop() {
         // remember last button press event
         lastButtonPress = millis();
       }
+
+      // Button input management
+      // PLAY/PAUSE BTN management
+//      pauseBtnPressed = false;
+//      pauseBtnState = digitalRead(PAUSEBTN);
+//      if (pauseBtnState != pauseBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+//        pauseBtnPressed = pauseBtnState == HIGH;
+//        pauseBtnPrevState = pauseBtnState;
+//      } 
+
+      // go to talking mode after finish setting up the time
+      if (pauseBtnPressed) {
+        timeLeft = calculateTime(setupHours, setupMinutes, setupSeconds);
+        Serial.println("pause button pressed in MODE_TALK");
+        Serial.println("Setup time: ");
+        Serial.print("Hours: ");
+        Serial.print(setupHours);
+        Serial.print(" -- Minutes: ");
+        Serial.print(setupMinutes);
+        Serial.print(" -- Seconds: ");
+        Serial.println(setupSeconds); 
+        Serial.print("Total time: ");
+        Serial.println(timeLeft);
+        Serial.println("=================");
+        currentMode = MODE_TALK;
+      }
+      
       // help debounce reading
       delay(1);
       break;
+    }
+
+      case MODE_TALK: {
+        // counting down  
+        lastTime = millis();
+//        while (!pauseBtnPressed || !skipBtnPressed) {
+        while (timeLeft > 0) {
+          if (millis() - lastTime >= 1000) {
+            timeLeft--;
+            lastTime += 1000;
+            display(timeLeft);
+            Serial.print("timeLeft: ");
+            Serial.println(timeLeft);
+          }
+          // give the opportunity to pause?
+        }
+
+        // when time runs out, go to record mode
+        currentMode = MODE_OUTRO;
+
+        break;  
+      }
+
   }
 }
 
 // HELPER FUNCTIONS
+uint16_t calculateTime(int hours, int minutes, int seconds) {
+  uint16_t resHours = 3600*hours;
+  uint16_t resMinutes = 60*minutes;
+  uint16_t resSeconds = seconds;
+  return resHours + resMinutes + resSeconds;
+}
+
+void display (uint16_t sec) {
+  int hr = sec/3600;
+//  sec = sec - hr * 3600;
+  int mi = sec/60;
+  int secs = sec % 60;
+//  sec = sec - mi*60;
+   
+   // print hr:mi:sec
+//   Serial.println(hr, " : ", min, " : ", sec);
+   Serial.print(hr);
+   Serial.print(" : ");
+   Serial.print(mi);
+   Serial.print(" : ");
+   Serial.println(secs);
+}
