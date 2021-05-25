@@ -14,6 +14,7 @@ uint16_t calculateTime(int hours, int minutes, int seconds);
 
 // I2C
 #define SLAVE_ADDR 9
+int msg = 0;
 
 // Start Btn
 #define STARTBTN 2
@@ -41,8 +42,8 @@ bool skipBtnPressed = false;
 int nextBtn = 3;
 int pauseBtn = 4;
 TMRpcm audio;
-char const intro[] = "introtune.wav";
-char const past[] = "samplepast2.wav";
+int audiofile = 0; 
+#define playTime 5000
 
 // timer
 int setupHours = 0;
@@ -74,11 +75,12 @@ const int MODE_TALK_SETUP = 3; //user talks about their day
 const int MODE_TALK = 4; 
 const int MODE_OUTRO = 5; //user closes the show
 const int MODE_FUTURE = 6; //records
+const int MODE_FINISH = 7; //last words and go to idle
 int currentMode = MODE_IDLE;
 
 void setup() {
   // initialize I2C communications as mater
-  // Wire.begin();
+  Wire.begin();
   Serial.begin(9600);
 
   pinMode(STARTBTN, INPUT); //start button
@@ -208,56 +210,65 @@ void loop() {
     }
     case MODE_REPLAY: {
       Serial.println("ENTERRING REPLAY MODE");
-      audio.play("preview.wav");
-      while (!pauseBtnPressed || !skipBtnPressed) {
-        // Button input management
-        // PLAY/PAUSE BTN management
-        pauseBtnPressed = false;
-        pauseBtnState = digitalRead(PAUSEBTN);
-        if (pauseBtnState != pauseBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
-          pauseBtnPressed = pauseBtnState == HIGH;
-          pauseBtnPrevState = pauseBtnState;
-        } 
-        
-        if (pauseBtnPressed) {
-          Serial.println("pause button pressed");
-        }
-      
-        // SKIP BTN management
-        skipBtnPressed = false;
-        skipBtnState = digitalRead(SKIPBTN);
-        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
-          skipBtnPressed = skipBtnState == HIGH;
-          skipBtnPrevState = skipBtnState;
-        } 
-
-        // if pause is pressed, pause audio
-        if (pauseBtnPressed) {
-          Serial.println("PAUSEBTN btn pressed in REPLAY");
-          audio.pause();
-          while (!pauseBtnPressed);
-          delay(200);
-        }
-
-        // if skip is pressed, go to next mode
-        if (skipBtnPressed) {
-          Serial.println("SKIPBTN btn pressed in REPLAY");
-          audio.disable();
-          while (!skipBtnPressed);
-          currentMode = MODE_TALK_SETUP;
-          delay(200);
-          break;
-        }
-
-        // when the intro audio finishes playing
-        if (!audio.isPlaying()) {
-          Serial.println("audio is finished, time to switch modes in REPLAY");
-          currentMode = MODE_TALK_SETUP;
-          Serial.println("TALK MODE");
-          delay(200);
-          break;
-        }
+      // trigger slave
+      Wire.beginTransmission(SLAVE_ADDR);
+      Wire.write(msg = 0);
+      Wire.endTransmission();
+      lastTime = millis();
+      while (millis() - lastTime <= playTime) {
+        Serial.println("still replaying..");
       }
+      currentMode = MODE_TALK_SETUP;
+//      audio.play("preview.wav");
+//      while (!pauseBtnPressed || !skipBtnPressed) {
+//        // Button input management
+//        // PLAY/PAUSE BTN management
+//        pauseBtnPressed = false;
+//        pauseBtnState = digitalRead(PAUSEBTN);
+//        if (pauseBtnState != pauseBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+//          pauseBtnPressed = pauseBtnState == HIGH;
+//          pauseBtnPrevState = pauseBtnState;
+//        } 
+//        
+//        if (pauseBtnPressed) {
+//          Serial.println("pause button pressed");
+//        }
+//      
+//        // SKIP BTN management
+//        skipBtnPressed = false;
+//        skipBtnState = digitalRead(SKIPBTN);
+//        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+//          skipBtnPressed = skipBtnState == HIGH;
+//          skipBtnPrevState = skipBtnState;
+//        } 
+//
+//        // if pause is pressed, pause audio
+//        if (pauseBtnPressed) {
+//          Serial.println("PAUSEBTN btn pressed in REPLAY");
+//          audio.pause();
+//          while (!pauseBtnPressed);
+//          delay(200);
+//        }
+//
+//        // if skip is pressed, go to next mode
+//        if (skipBtnPressed) {
+//          Serial.println("SKIPBTN btn pressed in REPLAY");
+//          audio.disable();
+//          while (!skipBtnPressed);
+//          currentMode = MODE_TALK_SETUP;
+//          delay(200);
+//          break;
+//        }
+//
+//        // when the intro audio finishes playing
+//        if (!audio.isPlaying()) {
+//          Serial.println("audio is finished, time to switch modes in REPLAY");
+//          currentMode = MODE_TALK_SETUP;
+//          Serial.println("TALK MODE");
+//          delay(200);
+//          break;
+//        }
+//      }
       break;
       }
     case MODE_TALK_SETUP: {
@@ -315,10 +326,6 @@ void loop() {
               } 
             }
           }
-//        Serial.print("Direction: ");
-//        Serial.print(encdir);
-//        Serial.print(" --- Value: ");
-//        Serial.println(counter);
         Serial.print("Hours: ");
         Serial.print(setupHours);
         Serial.print(" -- Minutes: ");
@@ -436,7 +443,7 @@ void loop() {
             Serial.println("SKIPBTN btn pressed");
             audio.disable();
             while (!skipBtnPressed);
-            currentMode = MODE_REPLAY;
+            currentMode = MODE_FUTURE;
             delay(200);
             break;
           }
@@ -453,6 +460,21 @@ void loop() {
     }
 
     case MODE_FUTURE: {
+      Serial.println("MODE_FUTURE_ACCESSED");
+      // trigger slave
+//      Wire.beginTransmission(SLAVE_ADDR);
+//      Wire.write(msg = 1);
+//      Wire.endTransmission();
+//      lastTime = millis();
+//      while (millis() - lastTime <= playTime) {
+//        Serial.println("recording...");
+//      }
+//      currentMode = MODE_FINISH;
+      break;
+    }
+
+    case MODE_FINISH: {
+//      Serial.println("Finishing_ACCESSED");
       break;
     }
   }
@@ -468,13 +490,9 @@ uint16_t calculateTime(int hours, int minutes, int seconds) {
 
 void display (uint16_t sec) {
   int hr = sec/3600;
-//  sec = sec - hr * 3600;
   int mi = sec/60;
   int secs = sec % 60;
-//  sec = sec - mi*60;
-   
-   // print hr:mi:sec
-//   Serial.println(hr, " : ", min, " : ", sec);
+
    Serial.print(hr);
    Serial.print(" : ");
    Serial.print(mi);
