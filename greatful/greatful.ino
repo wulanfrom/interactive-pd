@@ -1,3 +1,4 @@
+// lcd screen
 #include <LiquidCrystal.h>
 // microsd
 #include <SPI.h>
@@ -5,33 +6,24 @@
 #include <pcmRF.h>
 #include <pcmConfig.h>
 #include <TMRpcm.h>
-
+TMRpcm audio;
 
 // functions
 uint16_t calculateTime(int hours, int minutes, int seconds);
 void display (uint16_t sec);
 
 // MicroSD pins
-const int SD_ChipSelectPin = 22; //ChipSelectPin
-const int SD_MOSI = 21;
-const int SD_SCK = 23;
-const int SD_MISO = 24;
+const int SD_ChipSelectPin = 53; //ChipSelectPin
+const int SD_MOSI = 51;
+const int SD_SCK = 52;
+const int SD_MISO = 50;
 
 // Speaker + Module, microsd
-#define SPEAKER 32
-TMRpcm audio;
+const int SPEAKER = 11;
 int audiofile = 0; 
 
 // MAX9814 pins
 //#define MAX_OUT A0
-
-//TMRpcm audio;
-//int audioFile = 0;
-//unsigned long i = 0;
-//bool recmode = 0; // to check whether it's in recording mode or not
-
-const int buttonPin = 3;     // the number of the pushbutton pin
-const int ledPin = 13;      // the number of the LED pin
 
 // variables will change:
 int buttonState = 0;         // variable for reading the pushbutton status
@@ -107,22 +99,21 @@ void setup() {
   lcd.setCursor(0,0);
 
   // MicroSD
+  pinMode(SD_ChipSelectPin, OUTPUT);
+  digitalWrite(SD_ChipSelectPin, HIGH);
   Serial.print("Initializing SD card... ");
   if (!SD.begin(SD_ChipSelectPin)) {
     Serial.println("failed to load SD Card! ");
     while (true); //stay here
   }
   Serial.println("Mounting Successfull");
-  audio.speakerPin = SPEAKER; // set speaker output to pin 9
-  audio.setVolume(4); // volume level: 0 - 7
+  audio.CSPin = SD_ChipSelectPin;
+  audio.speakerPin = SPEAKER; // set speaker output to SPEAKER PIN
+  audio.setVolume(5); // volume level: 0 - 7
   audio.quality(1); //set 1 for 2x oversampling, 0 for normal
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  // set the cursor to column 0, line 1
-  // (note: line 1 is the second row, since counting begins with 0):
-  
   // STARTBTN management
   startBtnPressed = false;
   startBtnState = digitalRead(STARTBTN);
@@ -146,10 +137,7 @@ void loop() {
   if (skipBtnPressed) {
     Serial.println("SKIP button pressed");
   }
-
-   tone(8, 10000);
-
-
+  
   switch (currentMode) {
     case MODE_IDLE: {
       //Serial.println("MODE_IDLE");
@@ -164,11 +152,11 @@ void loop() {
     }
     case MODE_SHOW_START: {
       //Serial.println("MODE_SHOW_START");
-      audio.play("introtune.wav");
+      audio.play("INTROTUNE.wav");
       lcd.setCursor(0,0);
       lcd.print("MODE_SHOW_START");
       while (!startBtnPressed || !skipBtnPressed) {
-        
+        Serial.println(audio.isPlaying());
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -201,9 +189,16 @@ void loop() {
           while (!startBtnPressed);
           delay(200);
         }
+
+        // when the intro audio finishes playing
+        if (!audio.isPlaying()) {
+          Serial.println("audio is finished, time to switch modes");
+          currentMode = MODE_SHOW_SPEAK;
+          delay(200);
+          break;
+        }
         
       }
-      currentMode = MODE_SHOW_SPEAK;
       break;
     }
     case MODE_SHOW_SPEAK: { //talk for 5 minutes;
