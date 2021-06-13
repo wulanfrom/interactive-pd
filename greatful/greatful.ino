@@ -22,9 +22,11 @@ const int SD_MISO = 50;
 const int SPEAKER = 11;
 int audiofile = 0; 
 int audioIsPlaying = 0;
+unsigned long recordTime = 0;
+bool recmode = 0;
 
 // MAX9814 pins
-//#define MAX_OUT A0
+#define MAX_OUT A0
 
 // variables will change:
 int buttonState = 0;         // variable for reading the pushbutton status
@@ -33,13 +35,16 @@ int buttonState = 0;         // variable for reading the pushbutton status
 const int rs = 26, en = 27, d4 = 30, d5 = 31, d6 = 28, d7 = 29;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-// Modes
+// Modes (Leave message)
 const int MODE_IDLE = 0; //before the start
 const int MODE_SHOW_START = 1; //host talks and replays
 const int MODE_SHOW_SPEAK = 2; //user talks for 5 minutes
-const int MODE_SHOW_FUTURE = 3; //user leaves message to the future
-const int MODE_TALK_OUTRO = 4; //show outro plays
+const int MODE_ASK_FUTURE = 3; // hosts asks the user
+const int MODE_LEAVE_FUTURE = 4; //user leaves message to the future
+const int MODE_TALK_OUTRO = 5; //show outro plays
 int currentMode = MODE_IDLE;
+
+// Modes (Go through Archive)
 
 // Start Btn
 #define STARTBTN 3
@@ -66,14 +71,9 @@ unsigned long lastButtonPress = 0;
 int timePart; // hours: 0, minute: 1, seconds: 2
 
 // timer
-int setupHours = 0;
-int setupMinutes = 1; //5 minutes, talking time
-int setupSeconds = 0;
-int totalTime = 0;
-int currentHours = 0;
-int currentMinutes = 0;
-int currentSeconds = 0;
-uint16_t timeLeft = calculateTime(setupHours, setupMinutes, setupSeconds); // convert setup time to seconds
+const int TALKING_MINUTES = 1; //5 minutes, talking time
+const int LEAVE_MESSAGE_MINUTES = 1;
+uint16_t timeLeft = calculateTime(0, TALKING_MINUTES, 0); // convert setup time to seconds
 uint32_t lastTime = 0; //tto help with counting seconds
 
 // data selection
@@ -98,6 +98,9 @@ void setup() {
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   lcd.setCursor(0,0);
+
+  // MAX_OUT
+  pinMode(MAX_OUT, INPUT);
 
   // MicroSD
   pinMode(SD_ChipSelectPin, OUTPUT);
@@ -153,13 +156,14 @@ void loop() {
     }
     case MODE_SHOW_START: {
       //Serial.println("MODE_SHOW_START");
-      audio.play("PREVIEW.wav");
       lcd.setCursor(0,0);
       lcd.print("MODE_SHOW_START");
-//      Serial.println(audio.isPlaying());
+
+      // PLAY AUDIO MECHANISM 
+      audio.play("PREVIEW.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
-        Serial.println(audioIsPlaying);
+//        Serial.println(audioIsPlaying);
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -205,7 +209,6 @@ void loop() {
     }
     case MODE_SHOW_SPEAK: { //talk for 5 minutes;
       lcd.setCursor(0,0);
-//      lcd.print("                ");
       lcd.print("MODE_SHOW_SPEAK");
       // counting down
       lastTime = millis();
@@ -220,30 +223,136 @@ void loop() {
       }
       // Change to 5 minute timer countdown
       // When time runs out, go to the next mode
-      currentMode = MODE_SHOW_FUTURE;
+      currentMode = MODE_ASK_FUTURE;
       break;
     }
-    case MODE_SHOW_FUTURE: {
-      // Play the host's voice
+    case MODE_ASK_FUTURE: {
+      lcd.setCursor(0,0);
+      lcd.print("MODE_ASK_FUTURE");
+      // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
+      audio.play("PREVIEW.wav");
+      while (!startBtnPressed || !skipBtnPressed) {
+        audioIsPlaying = audio.isPlaying(); 
+//        Serial.println(audioIsPlaying);
+        // SKIP BTN management
+        skipBtnPressed = false;
+        skipBtnState = digitalRead(SKIPBTN);
+        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          skipBtnPressed = skipBtnState == HIGH;
+          skipBtnPrevState = skipBtnState;
+        }
+        // if skip is pressed, go to next mode
+        if (skipBtnPressed) {
+          Serial.println("SKIPBTN btn pressed");
+          audio.disable();
+          while (!skipBtnPressed);
+          currentMode = MODE_LEAVE_FUTURE;
+          delay(200);
+          break;
+        }
+
+        // PLAY/PAUSE BTN management
+        startBtnPressed = false;
+        startBtnState = digitalRead(STARTBTN);
+        if (startBtnState != startBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          startBtnPressed = startBtnState == HIGH;
+          startBtnPrevState = startBtnState;
+        } 
+
+        // if pause is pressed, pause audio
+        if (startBtnPressed) {
+          Serial.println("PAUSEBTN btn pressed");
+          audio.pause();
+          while (!startBtnPressed);
+          delay(200);
+        }
+
+        // when the asking audio finishes, then go to mode_show_future
+        if (!audioIsPlaying) {
+          Serial.println("audio is finished, time to switch to LEAVE FUTURE");
+          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          currentMode = MODE_LEAVE_FUTURE;
+          delay(200);
+          break;
+        }         
+      }
+      break;
+    }
+    case MODE_LEAVE_FUTURE: {
+      // User leaves message for future self
       //Serial.println("MODE_SHOW_FUTURE");
       lcd.setCursor(0,0);
-//      lcd.print("                ");
-      lcd.print("MODE_SHOW_FUTURE");
-      // Change to 5 minute timer countdown
-      if (startBtnPressed) {
-        currentMode = MODE_TALK_OUTRO;
+      lcd.print("MODE_LEAVE_FUTURE");
+      
+      // 1 minute timer countdown
+      // counting down
+      lastTime = millis();
+//      Serial.println(lastTime);
+      while (timeLeft > 0) {
+        if (millis() - lastTime >= 1000) {
+            timeLeft--;
+            lastTime += 1000;
+            display(timeLeft);
+            Serial.print("timeLeft: ");
+            Serial.println(timeLeft);
+          }
       }
+      
+      // When time runs out, go to the next mode
+      currentMode = MODE_TALK_OUTRO;
       break;
     }
     case MODE_TALK_OUTRO: {
       // Play the host's voice
       //Serial.println("MODE_TALK_OUTRO");
       lcd.setCursor(0,0);
-//      lcd.print("                ");
       lcd.print("MODE_TALK_OUTRO");
-      // Change to 5 minute timer countdown
-      if (startBtnPressed) {
-        currentMode = MODE_IDLE;
+      // PLAY OUTRO AUDIO
+      audio.play("PREVIEW.wav");
+      while (!startBtnPressed || !skipBtnPressed) {
+        audioIsPlaying = audio.isPlaying(); 
+        // Serial.println(audioIsPlaying);
+        // SKIP BTN management
+        skipBtnPressed = false;
+        skipBtnState = digitalRead(SKIPBTN);
+        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          skipBtnPressed = skipBtnState == HIGH;
+          skipBtnPrevState = skipBtnState;
+        }
+        // if skip is pressed, go to next mode
+        if (skipBtnPressed) {
+          Serial.println("SKIPBTN btn pressed");
+          audio.disable();
+          while (!skipBtnPressed);
+          currentMode = MODE_IDLE;
+          delay(200);
+          break;
+        }
+
+        // PLAY/PAUSE BTN management
+        startBtnPressed = false;
+        startBtnState = digitalRead(STARTBTN);
+        if (startBtnState != startBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          startBtnPressed = startBtnState == HIGH;
+          startBtnPrevState = startBtnState;
+        } 
+
+        // if pause is pressed, pause audio
+        if (startBtnPressed) {
+          Serial.println("PAUSEBTN btn pressed");
+          audio.pause();
+          while (!startBtnPressed);
+          delay(200);
+        }
+
+        // when the asking audio finishes, then go to mode_show_future
+        if (!audioIsPlaying) {
+          Serial.println("audio is finished, time to switch modes");
+          lastTime = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          currentMode = MODE_IDLE;
+          delay(200);
+          break;
+        }         
       }
       break;
     }
