@@ -1,22 +1,24 @@
 // lcd screen
 #include <LiquidCrystal.h>
+
 // microsd
 #include <SPI.h>
 #include <SD.h>
-#include <pcmRF.h>
-#include <pcmConfig.h>
 #include <TMRpcm.h>
 TMRpcm audio;
 
 // functions
 uint16_t calculateTime(int hours, int minutes, int seconds);
 void display (uint16_t sec);
+void printFiles(File dir, int numTabs);
 
 // MicroSD pins
 const int SD_ChipSelectPin = 53; //ChipSelectPin
 const int SD_MOSI = 51;
 const int SD_SCK = 52;
 const int SD_MISO = 50;
+char* directory[][50] = {"Files on Card"};
+int fileCounter = 0;
 
 // Speaker + Module, microsd
 const int SPEAKER = 11;
@@ -42,6 +44,7 @@ const int MODE_SHOW_SPEAK = 3; //user talks for 5 minutes
 const int MODE_ASK_FUTURE = 4; // hosts asks the user
 const int MODE_LEAVE_FUTURE = 5; //user leaves message to the future
 const int MODE_TALK_OUTRO = 6; //show outro plays
+const int MODE_EXPLORE_PAST = 7; // go through file names
 int currentMode = MODE_IDLE;
 
 // Modes (Go through Archive)
@@ -67,8 +70,6 @@ int counter = 0;
 int curStateCLK;
 int prevStateCLK;
 String encdir = "";
-//unsigned long lastButtonPress = 0;
-//int timePart; // hours: 0, minute: 1, seconds: 2
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
@@ -112,6 +113,10 @@ void setup() {
   }
   Serial.println("Mounting Successfull");
   audio.CSPin = SD_ChipSelectPin;
+  File root = SD.open("/Audio");
+  printFiles(root,0);
+    
+  // TMRPCM
   audio.speakerPin = SPEAKER; // set speaker output to SPEAKER PIN
   audio.setVolume(5); // volume level: 0 - 7
   audio.quality(1); //set 1 for 2x oversampling, 0 for normal
@@ -184,7 +189,7 @@ void loop() {
       lcd.print("MODE_SHOW_START");
 
       // PLAY AUDIO MECHANISM 
-      audio.play("PREVIEW.wav");
+      audio.play("/Audio/INTRO.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -236,7 +241,7 @@ void loop() {
       lcd.print("MODE_REPLAY_PAST");
 
       // PLAY AUDIO MECHANISM 
-      audio.play("PREVIEW.wav");
+      audio.play("FUTURE.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -369,12 +374,12 @@ void loop() {
       switch (recordTime) {
         case 0: {
           Serial.println("STOP recording..");
-          audio.stopRecording("FUTURERECORDING.wav"); break;
+          audio.stopRecording("FUTURE.wav"); break;
           break;
         }
         case 1: {
           Serial.println("Recording..");
-          audio.startRecording("FUTURERECORDING.wav", 16000, MAX_OUT);
+          audio.startRecording("FUTURE.wav", 16000, MAX_OUT);
           break;
         }
       }
@@ -402,7 +407,7 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_TALK_OUTRO");
       // PLAY OUTRO AUDIO
-      audio.play("PREVIEW.wav");
+      audio.play("/Audio/OUTRO.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -450,6 +455,13 @@ void loop() {
       }
       break;
     }
+
+    // Going through files
+    case MODE_EXPLORE_PAST: {
+//      audio.play("/Audio/PREVIEW.wav");
+      break;
+    }
+    
   }
 }
 
@@ -477,4 +489,22 @@ void display (uint16_t sec) {
   lcd.print(mi);
   lcd.print(" : ");
   lcd.print(secs);
+}
+
+void printFiles(File dir, int numTabs)
+{
+  while (true)
+  {
+    File entry =  dir.openNextFile();
+    if (! entry)
+    {
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++)
+    {
+      Serial.print('\t');
+    }
+    Serial.println(entry.name());
+    entry.close();
+  }
 }
