@@ -22,8 +22,7 @@ const int SD_MISO = 50;
 const int SPEAKER = 11;
 int audiofile = 0; 
 int audioIsPlaying = 0;
-unsigned long recordTime = 0;
-bool recmode = 0;
+unsigned long recordTime = 1;
 
 // MAX9814 pins
 #define MAX_OUT A0
@@ -38,10 +37,11 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 // Modes (Leave message)
 const int MODE_IDLE = 0; //before the start
 const int MODE_SHOW_START = 1; //host talks and replays
-const int MODE_SHOW_SPEAK = 2; //user talks for 5 minutes
-const int MODE_ASK_FUTURE = 3; // hosts asks the user
-const int MODE_LEAVE_FUTURE = 4; //user leaves message to the future
-const int MODE_TALK_OUTRO = 5; //show outro plays
+const int MODE_REPLAY_PAST = 2; //plays the user's past recording
+const int MODE_SHOW_SPEAK = 3; //user talks for 5 minutes
+const int MODE_ASK_FUTURE = 4; // hosts asks the user
+const int MODE_LEAVE_FUTURE = 5; //user leaves message to the future
+const int MODE_TALK_OUTRO = 6; //show outro plays
 int currentMode = MODE_IDLE;
 
 // Modes (Go through Archive)
@@ -61,14 +61,14 @@ int skipBtnPrevState = LOW;
 bool skipBtnPressed = false;
 
 // Rotary Encoder
-#define inputCLK 32 //GA
-#define inputDT 31 //GB
+#define inputCLK 5 // GB
+#define inputDT 4 // GA
 int counter = 0;
 int curStateCLK;
 int prevStateCLK;
 String encdir = "";
-unsigned long lastButtonPress = 0;
-int timePart; // hours: 0, minute: 1, seconds: 2
+//unsigned long lastButtonPress = 0;
+//int timePart; // hours: 0, minute: 1, seconds: 2
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
@@ -141,12 +141,36 @@ void loop() {
   if (skipBtnPressed) {
     Serial.println("SKIP button pressed");
   }
-  
+
+  //Rotary encoder
+  curStateCLK = digitalRead(inputCLK);
+  // If the previous and the current state of the inputCLK are different then a pulse has occured
+   if (curStateCLK != prevStateCLK){ 
+       
+     // If the inputDT state is different than the inputCLK state then 
+     // the encoder is rotating counterclockwise
+     if (digitalRead(inputDT) != curStateCLK) { 
+       counter --;
+       encdir ="CCW";
+       
+     } else {
+       // Encoder is rotating clockwise
+       counter ++;
+       encdir ="CW";
+     }
+     Serial.print("Direction: ");
+     Serial.print(encdir);
+     Serial.print(" -- Value: ");
+     Serial.println(counter);
+   } 
+   // Update previousStateCLK with the current state
+   prevStateCLK = curStateCLK; 
+
+  // MODE MANAGEMENT
   switch (currentMode) {
     case MODE_IDLE: {
       //Serial.println("MODE_IDLE");
       lcd.setCursor(0,0);
-//      lcd.print("                ");
       lcd.print("MODE_IDLE");
       // change with photoresistor levels later
       if (startBtnPressed) {
@@ -163,7 +187,59 @@ void loop() {
       audio.play("PREVIEW.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
-//        Serial.println(audioIsPlaying);
+        //Serial.println(audioIsPlaying);
+        // SKIP BTN management
+        skipBtnPressed = false;
+        skipBtnState = digitalRead(SKIPBTN);
+        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          skipBtnPressed = skipBtnState == HIGH;
+          skipBtnPrevState = skipBtnState;
+        }
+        // if skip is pressed, go to next mode
+        if (skipBtnPressed) {
+          Serial.println("SKIPBTN btn pressed");
+          audio.disable();
+          while (!skipBtnPressed);
+          currentMode = MODE_REPLAY_PAST;
+          delay(200);
+          break;
+        }
+
+        // PLAY/PAUSE BTN management
+        startBtnPressed = false;
+        startBtnState = digitalRead(STARTBTN);
+        if (startBtnState != startBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          startBtnPressed = startBtnState == HIGH;
+          startBtnPrevState = startBtnState;
+        } 
+
+        // if pause is pressed, pause audio
+        if (startBtnPressed) {
+          Serial.println("PAUSEBTN btn pressed");
+          audio.pause();
+          while (!startBtnPressed);
+          delay(200);
+        }
+
+        // when the intro audio finishes playing
+          if (!audioIsPlaying) {
+            Serial.println("audio is finished, time to switch modes");
+            currentMode = MODE_REPLAY_PAST;
+            delay(200);
+            break;
+          }        
+        }
+      break;
+    }
+    case MODE_REPLAY_PAST: {
+      lcd.setCursor(0,0);
+      lcd.print("MODE_REPLAY_PAST");
+
+      // PLAY AUDIO MECHANISM 
+      audio.play("PREVIEW.wav");
+      while (!startBtnPressed || !skipBtnPressed) {
+        audioIsPlaying = audio.isPlaying(); 
+        //Serial.println(audioIsPlaying);
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -219,7 +295,7 @@ void loop() {
             display(timeLeft);
             Serial.print("timeLeft: ");
             Serial.println(timeLeft);
-          }
+        }
       }
       // Change to 5 minute timer countdown
       // When time runs out, go to the next mode
@@ -233,7 +309,7 @@ void loop() {
       audio.play("PREVIEW.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
-//        Serial.println(audioIsPlaying);
+        // Serial.println(audioIsPlaying);
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -246,6 +322,7 @@ void loop() {
           Serial.println("SKIPBTN btn pressed");
           audio.disable();
           while (!skipBtnPressed);
+          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
           currentMode = MODE_LEAVE_FUTURE;
           delay(200);
           break;
@@ -287,7 +364,21 @@ void loop() {
       // 1 minute timer countdown
       // counting down
       lastTime = millis();
-//      Serial.println(lastTime);
+      // Serial.println(lastTime);
+      // Record
+      switch (recordTime) {
+        case 0: {
+          Serial.println("STOP recording..");
+          audio.stopRecording("FUTURERECORDING.wav"); break;
+          break;
+        }
+        case 1: {
+          Serial.println("Recording..");
+          audio.startRecording("FUTURERECORDING.wav", 16000, MAX_OUT);
+          break;
+        }
+      }
+      
       while (timeLeft > 0) {
         if (millis() - lastTime >= 1000) {
             timeLeft--;
@@ -295,8 +386,11 @@ void loop() {
             display(timeLeft);
             Serial.print("timeLeft: ");
             Serial.println(timeLeft);
-          }
+        }
       }
+      Serial.print("recordTime: ");
+      Serial.println(recordTime);
+      recordTime = 0;
       
       // When time runs out, go to the next mode
       currentMode = MODE_TALK_OUTRO;
