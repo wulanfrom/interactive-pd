@@ -21,6 +21,7 @@ const int SD_MISO = 50;
 // Speaker + Module, microsd
 const int SPEAKER = 11;
 int audiofile = 0; 
+int audioIsPlaying = 0;
 
 // MAX9814 pins
 //#define MAX_OUT A0
@@ -152,11 +153,13 @@ void loop() {
     }
     case MODE_SHOW_START: {
       //Serial.println("MODE_SHOW_START");
-      audio.play("INTROTUNE.wav");
+      audio.play("PREVIEW.wav");
       lcd.setCursor(0,0);
       lcd.print("MODE_SHOW_START");
+//      Serial.println(audio.isPlaying());
       while (!startBtnPressed || !skipBtnPressed) {
-        Serial.println(audio.isPlaying());
+        audioIsPlaying = audio.isPlaying(); 
+        Serial.println(audioIsPlaying);
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -191,14 +194,13 @@ void loop() {
         }
 
         // when the intro audio finishes playing
-        if (!audio.isPlaying()) {
-          Serial.println("audio is finished, time to switch modes");
-          currentMode = MODE_SHOW_SPEAK;
-          delay(200);
-          break;
+          if (!audioIsPlaying) {
+            Serial.println("audio is finished, time to switch modes");
+            currentMode = MODE_SHOW_SPEAK;
+            delay(200);
+            break;
+          }        
         }
-        
-      }
       break;
     }
     case MODE_SHOW_SPEAK: { //talk for 5 minutes;
