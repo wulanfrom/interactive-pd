@@ -10,7 +10,7 @@ TMRpcm audio;
 // constants
 // all the logs in a month, after 31 inputs, you have to take out the SDCard and clean it
 int pastLogs[31]; // [0,1,2,3,4] corresponds to "PAST0.wav", "PAST1.wav", ...
-int cur = 1;
+int cur = 3;
 // INITIALIZE THE FILES IN THE MICROSD with "PAST0.wav"
 // "This is an example recording, don't forget to state your date of recording in the beginning!
 // The recording is 1 minute long."
@@ -56,7 +56,7 @@ const int MODE_ASK_FUTURE = 5; // hosts asks the user
 const int MODE_LEAVE_FUTURE = 6; //user leaves message to the future
 const int MODE_TALK_OUTRO = 7; //show outro plays
 const int MODE_EXPLORE_PAST = 8; // go through file names
-int currentMode = MODE_IDLE;
+int currentMode = MODE_EXPLORE_PAST;
 
 // Modes (Go through Archive)
 
@@ -548,8 +548,79 @@ void loop() {
 
     // Going through files
     case MODE_EXPLORE_PAST: {
-      Serial.print("Cur: ");
-      Serial.println(cur);
+//      Serial.print("Cur: ");
+//      Serial.println(cur);
+      int curVal = counter % cur; 
+      lcd.setCursor(0, 0);
+      String str = "PAST ENTRY " + String(curVal) + "          ";
+      lcd.print(str);
+//        lcd.print(str);
+//      if (cur == 1) {
+//        lcd.setCursor(0,0);
+//        lcd.print("PAST ENTRY 1");
+//      }
+//      else {
+//        if (counter >= 0) {
+//          curVal = counter % cur; 
+//        }
+//        else {
+//          curVal = (counter - 1 + cur) % 12;
+//        }
+//        lcd.setCursor(0, 0);
+////        lcd.print("                          ");
+//        String str = "PAST ENTRY " + String(curVal) + "          ";
+//        lcd.print(str);
+//      }
+
+      // if the start button is pressed
+      if (startBtnPressed) {
+//        audio.play("PAST2.wav");
+//        audio.play(futureFileNames(curVal + 1));
+        playFile(curVal + 1);
+        while (!startBtnPressed || !skipBtnPressed) {
+          audioIsPlaying = audio.isPlaying(); 
+          
+          // SKIP BTN management
+          skipBtnPressed = false;
+          skipBtnState = digitalRead(SKIPBTN);
+          if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+            skipBtnPressed = skipBtnState == HIGH;
+            skipBtnPrevState = skipBtnState;
+          }
+          // if skip is pressed, go to next mode
+          if (skipBtnPressed) {
+            Serial.println("SKIPBTN btn pressed");
+            audio.disable();
+            while (!skipBtnPressed);
+//            currentMode = MODE_IDLE;
+            delay(200);
+            break;
+          }
+     
+          // PLAY/PAUSE BTN management
+          startBtnPressed = false;
+          startBtnState = digitalRead(STARTBTN);
+          if (startBtnState != startBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+            startBtnPressed = startBtnState == HIGH;
+            startBtnPrevState = startBtnState;
+          } 
+  
+          // if pause is pressed, pause audio
+          if (startBtnPressed) {
+            Serial.println("PAUSEBTN btn pressed");
+            audio.pause();
+            while (!startBtnPressed);
+            delay(200);
+          }
+  
+          // when the asking audio finishes, then go to mode_show_future
+          if (!audioIsPlaying) {
+            Serial.println("audio finished playing");
+            delay(200);
+            break;
+          }         
+        }
+      }
       break;
     }
     
@@ -594,13 +665,13 @@ void initFiles(File dir, int numTabs)
     }
     for (uint8_t i = 0; i < numTabs; i++)
     {
-      Serial.print('\t');
+//      Serial.print('\t');
     }
-    Serial.println(entry.name());
+//    Serial.println(entry.name());
     String filename = entry.name();
     String beginning = filename.substring(0, 6);
-    Serial.print("beginning: ");
-    Serial.println(beginning);
+//    Serial.print("beginning: ");
+//    Serial.println(beginning);
     if (beginning == "PAST" and counter < 31) {
 //      pastLogs[counter] = filename;
       counter++;
@@ -739,4 +810,116 @@ char* futureFileNames(int num) {
     }
   }
   return str;
+}
+
+void playFile(int num) {
+  switch (num) {
+    case 1: {
+      audio.play("PAST0.wav");
+      break;
+    }
+    case 2: {
+      audio.play("PAST1.wav");
+      break;
+    }
+    case 3: {
+      audio.play("PAST2.wav");
+      break;
+    }
+    case 4: {
+      audio.play("PAST3.wav");
+      break;
+    }
+    case 5: {
+      audio.play("PAST4.wav");
+      break;
+    }
+    case 6: {
+      audio.play("PAST5.wav");
+      break;
+    }
+    case 7: {
+      audio.play("PAST6.wav");
+      break;
+    }
+    case 8: {
+      audio.play("PAST7.wav");
+      break;
+    }
+    case 9: {
+      audio.play("PAST8.wav");
+      break;
+    }
+    case 10: {
+      audio.play("PAST9.wav");
+      break;
+    }
+    case 11: {
+      audio.play("PAST10.wav");
+      break;
+    } 
+    case 12: {
+      audio.play("PAST11.wav");
+      break;
+    }
+    case 13: {
+      audio.play("PAST12.wav");
+      break;
+    }case 14: {
+      audio.play("PAST13.wav");
+      break;
+    }
+    case 15: {
+      audio.play("PAST14.wav");
+      break;
+    }case 16: {
+      audio.play("PAST15.wav");
+      break;
+    }case 17: {
+      audio.play("PAST16.wav");
+      break;
+    }case 18: {
+      audio.play("PAST17.wav");
+      break;
+    }case 19: {
+      audio.play("PAST18.wav");
+      break;
+    }case 20: {
+      audio.play("PAST19.wav");
+      break;
+    }case 21: {
+      audio.play("PAST20.wav");
+      break;
+    }case 22: {
+      audio.play("PAST21.wav");
+      break;
+    }case 23: {
+      audio.play("PAST22.wav");
+      break;
+    }case 24: {
+      audio.play("PAST23.wav");
+      break;
+    }case 25: {
+      audio.play("PAST24.wav");
+      break;
+    }case 26: {
+      audio.play("PAST25.wav");
+      break;
+    }case 27: {
+      audio.play("PAST26.wav");
+      break;
+    }case 28: {
+      audio.play("PAST27.wav");
+      break;
+    }case 29: {
+      audio.play("PAST28.wav");
+      break;
+    }case 30: {
+      audio.play("PAST29.wav");
+      break;
+    }case 31: {
+      audio.play("PAST30.wav");
+      break;
+    }
+  }
 }
