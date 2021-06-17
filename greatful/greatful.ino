@@ -86,6 +86,11 @@ String encdir = "";
 #define photoPin A2
 int lightCal;
 int lightVal;
+int threshold = 50; // if under threshold for 
+uint16_t lastSeparateTime = 0; // last time when the microphone is detached
+uint16_t thresholdTime = 3; // 3 seconds
+uint16_t totalSeparateTime = thresholdTime; // total time it's been separated
+int goToShow = 0; // initially 0, 1 when in the show and 0 later
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
@@ -190,8 +195,11 @@ void loop() {
    } 
    // Update previousStateCLK with the current state
    prevStateCLK = curStateCLK; 
-
+   
    // PHOTO RESISTOR Management
+    lightVal = analogRead(photoPin);
+    Serial.print("LightVal: ");
+    Serial.println(lightVal);
 
   // MODE MANAGEMENT
   switch (currentMode) {
@@ -200,12 +208,31 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_IDLE");
       // change with photoresistor levels later
-      if (startBtnPressed) {
-        currentMode = MODE_SHOW_START;
-      }
+//      if (startBtnPressed) {
+//        currentMode = MODE_SHOW_START;
+//      }
+      // PHOTO RESISTOR Management
 //      lightVal = analogRead(photoPin);
-//      Serial.print("LightVal: ");
-//      Serial.println(lightVal);
+      Serial.print("LightVal: ");
+      Serial.println(lightVal);
+
+      // if the 
+      lastSeparateTime = millis();
+      if (lightVal > threshold) {
+        lastSeparateTime  = millis();
+        while (totalSeparateTime > 0) {
+          if (millis() - lastSeparateTime >= 1000) {
+              totalSeparateTime--;
+              lastSeparateTime += 1000;
+              lcd.setCursor(0,1);
+              display(totalSeparateTime);
+              Serial.print("separate timeLeft: ");
+              Serial.println(totalSeparateTime);
+          }
+        }
+        currentMode = MODE_SHOW_START; // After the threshold seconds, start the show 
+      }
+      
       // Go to Explore Mode
       if (skipBtnPressed) {
         Serial.println("SKIP button pressed");
