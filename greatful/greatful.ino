@@ -7,10 +7,20 @@
 #include <TMRpcm.h>
 TMRpcm audio;
 
+// constants
+// all the logs in a month, after 31 inputs, you have to take out the SDCard and clean it
+int pastLogs[31]; // [0,1,2,3,4] corresponds to "PAST0.wav", "PAST1.wav", ...
+int cur = 1;
+// INITIALIZE THE FILES IN THE MICROSD with "PAST0.wav"
+// "This is an example recording, don't forget to state your date of recording in the beginning!
+// The recording is 1 minute long."
+
 // functions
 uint16_t calculateTime(int hours, int minutes, int seconds);
 void display (uint16_t sec);
-void printFiles(File dir, int numTabs);
+void initFiles(File dir, int numTabs);
+String newFileName(int cur);
+//void initializeLogs(File dir, int numTabs);
 
 // MicroSD pins
 const int SD_ChipSelectPin = 53; //ChipSelectPin
@@ -40,11 +50,12 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 const int MODE_IDLE = 0; //before the start
 const int MODE_SHOW_START = 1; //host talks and replays
 const int MODE_REPLAY_PAST = 2; //plays the user's past recording
-const int MODE_SHOW_SPEAK = 3; //user talks for 5 minutes
-const int MODE_ASK_FUTURE = 4; // hosts asks the user
-const int MODE_LEAVE_FUTURE = 5; //user leaves message to the future
-const int MODE_TALK_OUTRO = 6; //show outro plays
-const int MODE_EXPLORE_PAST = 7; // go through file names
+const int MODE_HOST_ASK = 3; // host asks you to talk
+const int MODE_SHOW_SPEAK = 4; //user talks for 5 minutes
+const int MODE_ASK_FUTURE = 5; // hosts asks the user
+const int MODE_LEAVE_FUTURE = 6; //user leaves message to the future
+const int MODE_TALK_OUTRO = 7; //show outro plays
+const int MODE_EXPLORE_PAST = 8; // go through file names
 int currentMode = MODE_IDLE;
 
 // Modes (Go through Archive)
@@ -70,6 +81,11 @@ int counter = 0;
 int curStateCLK;
 int prevStateCLK;
 String encdir = "";
+
+// Photoresistor
+//#define photoPin A0
+//int lightCal;
+//int lightVal;
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
@@ -113,13 +129,16 @@ void setup() {
   }
   Serial.println("Mounting Successfull");
   audio.CSPin = SD_ChipSelectPin;
-  File root = SD.open("/Audio");
-  printFiles(root,0);
+  File root = SD.open("/");
+  initFiles(root,0);
     
   // TMRPCM
   audio.speakerPin = SPEAKER; // set speaker output to SPEAKER PIN
   audio.setVolume(5); // volume level: 0 - 7
   audio.quality(1); //set 1 for 2x oversampling, 0 for normal
+
+  // photoResistor
+//  lightCal = analogRead(photoPin);
 }
 
 void loop() {
@@ -181,6 +200,10 @@ void loop() {
       if (startBtnPressed) {
         currentMode = MODE_SHOW_START;
       }
+//      lightVal = analogRead(photoPin);
+//      Serial.print("LightVal: ");
+//      Serial.println(lightVal);
+
       break;
     }
     case MODE_SHOW_START: {
@@ -189,7 +212,8 @@ void loop() {
       lcd.print("MODE_SHOW_START");
 
       // PLAY AUDIO MECHANISM 
-      audio.play("/Audio/INTRO.wav");
+//      audio.play("/Audio/INTRO.wav");
+      audio.play("/Audio/INTRO1.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -241,7 +265,13 @@ void loop() {
       lcd.print("MODE_REPLAY_PAST");
 
       // PLAY AUDIO MECHANISM 
-      audio.play("FUTURE.wav");
+//      audio.play("FUTURE.wav");
+//      if (cur == 1){
+//        audio.play("PAST0.wav"); // initialize microSD with 0
+//      }/
+//      else {
+        audio.play(futureFileNames(cur));
+//      }
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -257,7 +287,7 @@ void loop() {
           Serial.println("SKIPBTN btn pressed");
           audio.disable();
           while (!skipBtnPressed);
-          currentMode = MODE_SHOW_SPEAK;
+          currentMode = MODE_HOST_ASK;
           delay(200);
           break;
         }
@@ -281,11 +311,65 @@ void loop() {
         // when the intro audio finishes playing
           if (!audioIsPlaying) {
             Serial.println("audio is finished, time to switch modes");
-            currentMode = MODE_SHOW_SPEAK;
+            currentMode = MODE_HOST_ASK;
             delay(200);
             break;
           }        
         }
+      break;
+    }
+    case MODE_HOST_ASK: {
+      lcd.setCursor(0,0);
+      lcd.print("MODE_HOST_ASK");
+      // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
+      audio.play("/Audio/TODAY1.wav"); // Host asks audio
+      while (!startBtnPressed || !skipBtnPressed) {
+        audioIsPlaying = audio.isPlaying(); 
+        // Serial.println(audioIsPlaying);
+        // SKIP BTN management
+        skipBtnPressed = false;
+        skipBtnState = digitalRead(SKIPBTN);
+        if (skipBtnState != skipBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          skipBtnPressed = skipBtnState == HIGH;
+          skipBtnPrevState = skipBtnState;
+        }
+        // if skip is pressed, go to next mode
+        if (skipBtnPressed) {
+          Serial.println("SKIPBTN btn pressed");
+          audio.disable();
+          while (!skipBtnPressed);
+          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          currentMode = MODE_SHOW_SPEAK;
+          delay(200);
+          break;
+        }
+
+        // PLAY/PAUSE BTN management
+        startBtnPressed = false;
+        startBtnState = digitalRead(STARTBTN);
+        if (startBtnState != startBtnPrevState && (millis() - lastDebounceTime) > debounceDelay) {
+          startBtnPressed = startBtnState == HIGH;
+          startBtnPrevState = startBtnState;
+        } 
+
+        // if pause is pressed, pause audio
+        if (startBtnPressed) {
+          Serial.println("PAUSEBTN btn pressed");
+          audio.pause();
+          while (!startBtnPressed);
+          delay(200);
+        }
+
+        // when the asking audio finishes, then go to mode_show_future
+        if (!audioIsPlaying) {
+          Serial.println("audio is finished, time to switch to LEAVE FUTURE");
+//          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          timeLeft = calculateTime(0, 0, 30);
+          currentMode = MODE_SHOW_SPEAK;
+          delay(200);
+          break;
+        }         
+      }
       break;
     }
     case MODE_SHOW_SPEAK: { //talk for 5 minutes;
@@ -311,7 +395,7 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_ASK_FUTURE");
       // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
-      audio.play("PREVIEW.wav");
+      audio.play("/Audio/LEAVE1.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -352,7 +436,8 @@ void loop() {
         // when the asking audio finishes, then go to mode_show_future
         if (!audioIsPlaying) {
           Serial.println("audio is finished, time to switch to LEAVE FUTURE");
-          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+//          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          timeLeft = calculateTime(0, 0, 30);
           currentMode = MODE_LEAVE_FUTURE;
           delay(200);
           break;
@@ -374,12 +459,14 @@ void loop() {
       switch (recordTime) {
         case 0: {
           Serial.println("STOP recording..");
-          audio.stopRecording("FUTURE.wav"); break;
+//          audio.stopRecording("FUTURE.wav"); break;
+            audio.stopRecording(futureFileNames(cur)); break;
           break;
         }
         case 1: {
           Serial.println("Recording..");
-          audio.startRecording("FUTURE.wav", 16000, MAX_OUT);
+//          audio.startRecording("FUTURE.wav", 16000, MAX_OUT);
+            audio.startRecording(futureFileNames(cur), 16000, MAX_OUT);
           break;
         }
       }
@@ -407,10 +494,12 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_TALK_OUTRO");
       // PLAY OUTRO AUDIO
-      audio.play("/Audio/OUTRO.wav");
+      audio.play("/Audio/OUTRO1.wav");
+//      audio.play("/Audio/OUTROHOST.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
+        
         // SKIP BTN management
         skipBtnPressed = false;
         skipBtnState = digitalRead(SKIPBTN);
@@ -427,7 +516,7 @@ void loop() {
           delay(200);
           break;
         }
-
+   
         // PLAY/PAUSE BTN management
         startBtnPressed = false;
         startBtnState = digitalRead(STARTBTN);
@@ -448,6 +537,7 @@ void loop() {
         if (!audioIsPlaying) {
           Serial.println("audio is finished, time to switch modes");
           lastTime = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          cur++; // add to the amount of files available
           currentMode = MODE_IDLE;
           delay(200);
           break;
@@ -458,7 +548,8 @@ void loop() {
 
     // Going through files
     case MODE_EXPLORE_PAST: {
-//      audio.play("/Audio/PREVIEW.wav");
+      Serial.print("Cur: ");
+      Serial.println(cur);
       break;
     }
     
@@ -491,8 +582,35 @@ void display (uint16_t sec) {
   lcd.print(secs);
 }
 
-void printFiles(File dir, int numTabs)
+void initFiles(File dir, int numTabs)
 {
+  int counter = 0;
+  while (true)
+  {
+    File entry =  dir.openNextFile();
+    if (! entry)
+    {
+      break;
+    }
+    for (uint8_t i = 0; i < numTabs; i++)
+    {
+      Serial.print('\t');
+    }
+    Serial.println(entry.name());
+    String filename = entry.name();
+    String beginning = filename.substring(0, 6);
+    Serial.print("beginning: ");
+    Serial.println(beginning);
+    if (beginning == "PAST" and counter < 31) {
+//      pastLogs[counter] = filename;
+      counter++;
+    }
+    entry.close();
+  }
+}
+
+// populate the current logs with existing ones in the SD card
+void initializeLogs(File dir, int numTabs) { 
   while (true)
   {
     File entry =  dir.openNextFile();
@@ -507,4 +625,118 @@ void printFiles(File dir, int numTabs)
     Serial.println(entry.name());
     entry.close();
   }
+}
+
+char* futureFileNames(int num) {
+  char str[10] = "";
+  switch (num) {
+    case 1: {
+      str[10] = "PAST0.wav";
+      break;
+    }
+    case 2: {
+      str[10] = "PAST1.wav";
+      break;
+    }
+    case 3: {
+      str[10] = "PAST2.wav";
+      break;
+    }
+    case 4: {
+      str[10] = "PAST3.wav";
+      break;
+    }
+    case 5: {
+      str[10] = "PAST4.wav";
+      break;
+    }
+    case 6: {
+      str[10] = "PAST5.wav";
+      break;
+    }
+    case 7: {
+      str[10] = "PAST6.wav";
+      break;
+    }
+    case 8: {
+      str[10] = "PAST7.wav";
+      break;
+    }
+    case 9: {
+      str[10] = "PAST8.wav";
+      break;
+    }
+    case 10: {
+      str[10] = "PAST9.wav";
+      break;
+    }
+    case 11: {
+      str[10] = "PAST10.wav";
+      break;
+    } 
+    case 12: {
+      str[10] = "PAST11.wav";
+      break;
+    }
+    case 13: {
+      str[10] = "PAST12.wav";
+      break;
+    }case 14: {
+      str[10] = "PAST13.wav";
+      break;
+    }
+    case 15: {
+      str[10] = "PAST14.wav";
+      break;
+    }case 16: {
+      str[10] = "PAST15.wav";
+      break;
+    }case 17: {
+      str[10] = "PAST16.wav";
+      break;
+    }case 18: {
+      str[10] = "PAST17.wav";
+      break;
+    }case 19: {
+      str[10] = "PAST18.wav";
+      break;
+    }case 20: {
+      str[10] = "PAST19.wav";
+      break;
+    }case 21: {
+      str[10] = "PAST20.wav";
+      break;
+    }case 22: {
+      str[10] = "PAST21.wav";
+      break;
+    }case 23: {
+      str[10] = "PAST22.wav";
+      break;
+    }case 24: {
+      str[10] = "PAST23.wav";
+      break;
+    }case 25: {
+      str[10] = "PAST24.wav";
+      break;
+    }case 26: {
+      str[10] = "PAST25.wav";
+      break;
+    }case 27: {
+      str[10] = "PAST26.wav";
+      break;
+    }case 28: {
+      str[10] = "PAST27.wav";
+      break;
+    }case 29: {
+      str[10] = "PAST28.wav";
+      break;
+    }case 30: {
+      str[10] = "PAST29.wav";
+      break;
+    }case 31: {
+      str[10] = "PAST30.wav";
+      break;
+    }
+  }
+  return str;
 }
