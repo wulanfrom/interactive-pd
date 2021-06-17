@@ -10,7 +10,7 @@ TMRpcm audio;
 // constants
 // all the logs in a month, after 31 inputs, you have to take out the SDCard and clean it
 int pastLogs[31]; // [0,1,2,3,4] corresponds to "PAST0.wav", "PAST1.wav", ...
-int cur = 3;
+int cur = 1;
 // INITIALIZE THE FILES IN THE MICROSD with "PAST0.wav"
 // "This is an example recording, don't forget to state your date of recording in the beginning!
 // The recording is 1 minute long."
@@ -56,7 +56,7 @@ const int MODE_ASK_FUTURE = 5; // hosts asks the user
 const int MODE_LEAVE_FUTURE = 6; //user leaves message to the future
 const int MODE_TALK_OUTRO = 7; //show outro plays
 const int MODE_EXPLORE_PAST = 8; // go through file names
-int currentMode = MODE_EXPLORE_PAST;
+int currentMode = MODE_IDLE;
 
 // Modes (Go through Archive)
 
@@ -83,9 +83,9 @@ int prevStateCLK;
 String encdir = "";
 
 // Photoresistor
-//#define photoPin A0
-//int lightCal;
-//int lightVal;
+#define photoPin A2
+int lightCal;
+int lightVal;
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
@@ -138,7 +138,8 @@ void setup() {
   audio.quality(1); //set 1 for 2x oversampling, 0 for normal
 
   // photoResistor
-//  lightCal = analogRead(photoPin);
+  pinMode(photoPin, INPUT);
+  lightCal = analogRead(photoPin);
 }
 
 void loop() {
@@ -190,6 +191,8 @@ void loop() {
    // Update previousStateCLK with the current state
    prevStateCLK = curStateCLK; 
 
+   // PHOTO RESISTOR Management
+
   // MODE MANAGEMENT
   switch (currentMode) {
     case MODE_IDLE: {
@@ -203,7 +206,11 @@ void loop() {
 //      lightVal = analogRead(photoPin);
 //      Serial.print("LightVal: ");
 //      Serial.println(lightVal);
-
+      // Go to Explore Mode
+      if (skipBtnPressed) {
+        Serial.println("SKIP button pressed");
+        currentMode = MODE_EXPLORE_PAST;
+      }
       break;
     }
     case MODE_SHOW_START: {
@@ -213,7 +220,8 @@ void loop() {
 
       // PLAY AUDIO MECHANISM 
 //      audio.play("/Audio/INTRO.wav");
-      audio.play("/Audio/INTRO1.wav");
+//      audio.play("/Audio/INTRO1.wav");
+      audio.play("INTRO1.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -270,7 +278,8 @@ void loop() {
 //        audio.play("PAST0.wav"); // initialize microSD with 0
 //      }/
 //      else {
-        audio.play(futureFileNames(cur));
+//        audio.play(futureFileNames(cur));
+          playFile(cur); // play file
 //      }
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
@@ -322,7 +331,8 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_HOST_ASK");
       // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
-      audio.play("/Audio/TODAY1.wav"); // Host asks audio
+//      audio.play("/Audio/TODAY1.wav"); // Host asks audio
+      audio.play("TODAY1.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -395,7 +405,8 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_ASK_FUTURE");
       // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
-      audio.play("/Audio/LEAVE1.wav");
+//      audio.play("/Audio/LEAVE1.wav");
+      audio.play("LEAVE1.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -460,13 +471,14 @@ void loop() {
         case 0: {
           Serial.println("STOP recording..");
 //          audio.stopRecording("FUTURE.wav"); break;
-            audio.stopRecording(futureFileNames(cur)); break;
+            stopRecordFile(cur); break;
           break;
         }
         case 1: {
           Serial.println("Recording..");
 //          audio.startRecording("FUTURE.wav", 16000, MAX_OUT);
-            audio.startRecording(futureFileNames(cur), 16000, MAX_OUT);
+//            audio.startRecording(futureFileNames(cur), 16000, MAX_OUT);
+              recordFile(cur); break;
           break;
         }
       }
@@ -494,7 +506,8 @@ void loop() {
       lcd.setCursor(0,0);
       lcd.print("MODE_TALK_OUTRO");
       // PLAY OUTRO AUDIO
-      audio.play("/Audio/OUTRO1.wav");
+//      audio.play("/Audio/OUTRO1.wav");
+      audio.play("OUTRO1.wav");
 //      audio.play("/Audio/OUTROHOST.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
@@ -919,6 +932,278 @@ void playFile(int num) {
       break;
     }case 31: {
       audio.play("PAST30.wav");
+      break;
+    }
+  }
+}
+
+void recordFile(int num) {
+  switch (num) {
+    case 1: {
+//      audio.play("PAST0.wav");
+      audio.startRecording("PAST1.wav", 16000, MAX_OUT);
+      break;
+    }
+    case 2: {
+//      audio.play("PAST1.wav");
+      audio.startRecording("PAST2.wav", 16000, MAX_OUT);
+      break;
+    }
+    case 3: {
+//      audio.play("PAST2.wav");
+      audio.startRecording("PAST3.wav", 16000, MAX_OUT);
+      break;
+    }
+    case 4: {
+//      audio.play("PAST3.wav");
+      audio.startRecording("PAST4.wav", 16000, MAX_OUT);
+      break;
+    }
+    case 5: {
+      audio.startRecording("PAST5.wav", 16000, MAX_OUT);
+//      audio.play("PAST4.wav");
+      break;
+    }
+    case 6: {
+      audio.startRecording("PAST6.wav", 16000, MAX_OUT);
+      audio.play("PAST5.wav");
+      break;
+    }
+    case 7: {
+      audio.startRecording("PAST7.wav", 16000, MAX_OUT);
+//      audio.play("PAST6.wav");
+      break;
+    }
+    case 8: {
+//      audio.play("PAST7.wav");
+      audio.startRecording("PAST8.wav", 16000, MAX_OUT);
+      break;
+    }
+    case 9: {
+      audio.startRecording("PAST9.wav", 16000, MAX_OUT);
+//      audio.play("PAST8.wav");
+      break;
+    }
+    case 10: {
+      audio.startRecording("PAST10.wav", 16000, MAX_OUT);
+//      audio.play("PAST9.wav");
+      break;
+    }
+    case 11: {
+      audio.startRecording("PAST11.wav", 16000, MAX_OUT);
+//      audio.play("PAST10.wav");
+      break;
+    } 
+    case 12: {
+      audio.startRecording("PAST12.wav", 16000, MAX_OUT);
+//      audio.play("PAST11.wav");
+      break;
+    }
+    case 13: {
+      audio.startRecording("PAST13.wav", 16000, MAX_OUT);
+//      audio.play("PAST12.wav");
+      break;
+    }case 14: {
+      audio.startRecording("PAST14.wav", 16000, MAX_OUT);
+//      audio.play("PAST13.wav");
+      break;
+    }
+    case 15: {
+      audio.startRecording("PAST15.wav", 16000, MAX_OUT);
+//      audio.play("PAST14.wav");
+      break;
+    }case 16: {
+      audio.startRecording("PAST16.wav", 16000, MAX_OUT);      
+//      audio.play("PAST15.wav");
+      break;
+    }case 17: {
+      audio.startRecording("PAST17.wav", 16000, MAX_OUT);
+//      audio.play("PAST16.wav");
+      break;
+    }case 18: {
+      audio.startRecording("PAST18.wav", 16000, MAX_OUT);
+//      audio.play("PAST17.wav");
+      break;
+    }case 19: {
+      audio.startRecording("PAST19.wav", 16000, MAX_OUT);
+//      audio.play("PAST18.wav");
+      break;
+    }case 20: {
+      audio.startRecording("PAST20.wav", 16000, MAX_OUT);
+//      audio.play("PAST19.wav");
+      break;
+    }case 21: {
+      audio.startRecording("PAST21.wav", 16000, MAX_OUT);
+//      audio.play("PAST20.wav");
+      break;
+    }case 22: {
+      audio.startRecording("PAST22.wav", 16000, MAX_OUT);
+//      audio.play("PAST21.wav");
+      break;
+    }case 23: {
+      audio.startRecording("PAST23.wav", 16000, MAX_OUT);
+//      audio.play("PAST22.wav");
+      break;
+    }case 24: {
+      audio.startRecording("PAST24.wav", 16000, MAX_OUT);
+//      audio.play("PAST23.wav");
+      break;
+    }case 25: {
+      audio.startRecording("PAST25.wav", 16000, MAX_OUT);
+//      audio.play("PAST24.wav");
+      break;
+    }case 26: {
+      audio.startRecording("PAST26.wav", 16000, MAX_OUT);
+//      audio.play("PAST25.wav");
+      break;
+    }case 27: {
+      audio.startRecording("PAST27.wav", 16000, MAX_OUT);
+//      audio.play("PAST26.wav");
+      break;
+    }case 28: {
+      audio.startRecording("PAST28.wav", 16000, MAX_OUT);
+//      audio.play("PAST27.wav");
+      break;
+    }case 29: {
+      audio.startRecording("PAST29.wav", 16000, MAX_OUT);
+//      audio.play("PAST28.wav");
+      break;
+    }case 30: {
+      audio.startRecording("PAST30.wav", 16000, MAX_OUT);
+//      audio.play("PAST29.wav");
+      break;
+    }case 31: {
+      audio.startRecording("PAST31.wav", 16000, MAX_OUT);
+//      audio.play("PAST30.wav");
+      break;
+    }
+  }
+}
+
+void stopRecordFile(int num) {
+  switch (num) {
+    case 1: {
+      audio.stopRecording("PAST1.wav");
+      break;
+    }
+    case 2: {
+      audio.stopRecording("PAST2.wav");
+      break;
+    }
+    case 3: {
+      audio.stopRecording("PAST3.wav");
+      break;
+    }
+    case 4: {
+      audio.stopRecording("PAST4.wav");
+      break;
+    }
+    case 5: {
+      audio.stopRecording("PAST5.wav");
+      break;
+    }
+    case 6: {
+      audio.stopRecording("PAST6.wav");
+      break;
+    }
+    case 7: {
+      audio.stopRecording("PAST7.wav");
+      break;
+    }
+    case 8: {
+      audio.stopRecording("PAST8.wav");
+      break;
+    }
+    case 9: {
+      audio.stopRecording("PAST9.wav");
+      break;
+    }
+    case 10: {
+      audio.stopRecording("PAST10.wav");
+      break;
+    }
+    case 11: {
+      audio.stopRecording("PAST11.wav");
+      break;
+    }
+    case 12: {
+      audio.stopRecording("PAST12.wav");
+      break;
+    }
+    case 13: {
+      audio.stopRecording("PAST13.wav");
+      break;
+    }
+    case 14: {
+      audio.stopRecording("PAST14.wav");
+      break;
+    }
+    case 15: {
+      audio.stopRecording("PAST15.wav");
+      break;
+    }
+    case 16: {
+      audio.stopRecording("PAST16.wav");
+      break;
+    }
+    case 17: {
+      audio.stopRecording("PAST17.wav");
+      break;
+    }
+    case 18: {
+      audio.stopRecording("PAST18.wav");
+      break;
+    }
+    case 19: {
+      audio.stopRecording("PAST19.wav");
+      break;
+    }
+    case 20: {
+      audio.stopRecording("PAST20.wav");
+      break;
+    }
+    case 21: {
+      audio.stopRecording("PAST21.wav");
+      break;
+    }
+    case 22: {
+      audio.stopRecording("PAST22.wav");
+      break;
+    }
+    case 23: {
+      audio.stopRecording("PAST23.wav");
+      break;
+    }
+    case 24: {
+      audio.stopRecording("PAST24.wav");
+      break;
+    }
+    case 25: {
+      audio.stopRecording("PAST25.wav");
+      break;
+    }
+    case 26: {
+      audio.stopRecording("PAST27.wav");
+      break;
+    }
+    case 27: {
+      audio.stopRecording("PAST27.wav");
+      break;
+    }
+    case 28: {
+      audio.stopRecording("PAST28.wav");
+      break;
+    }
+    case 29: {
+      audio.stopRecording("PAST29.wav");
+      break;
+    }
+    case 30: {
+      audio.stopRecording("PAST30.wav");
+      break;
+    }
+    case 31: {
+      audio.stopRecording("PAST31.wav");
       break;
     }
   }
