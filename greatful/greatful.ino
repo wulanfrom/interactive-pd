@@ -90,13 +90,18 @@ int threshold = 50; // if under threshold for
 uint16_t lastSeparateTime = 0; // last time when the microphone is detached
 uint16_t thresholdTime = 3; // 3 seconds
 uint16_t totalSeparateTime = thresholdTime; // total time it's been separated
-int goToShow = 0; // initially 0, 1 when in the show and 0 later
+uint16_t timeLastShow = 0; // time stamp of after show
+uint32_t timeAfterShow = 10000000; // initially 0, 1 when in the show and 0 later
 
 // timer
 const int TALKING_MINUTES = 1; //5 minutes, talking time
 const int LEAVE_MESSAGE_MINUTES = 1;
 uint16_t timeLeft = calculateTime(0, TALKING_MINUTES, 0); // convert setup time to seconds
 uint32_t lastTime = 0; //tto help with counting seconds
+
+// timer to put handle
+uint32_t lastPutTime = 0;
+uint16_t timePutLeft = 8;
 
 // data selection
 int dataSelection = 0;
@@ -206,7 +211,9 @@ void loop() {
     case MODE_IDLE: {
       //Serial.println("MODE_IDLE");
       lcd.setCursor(0,0);
-      lcd.print("MODE_IDLE");
+      lcd.print("Move Microphone");
+      lcd.setCursor(0,1);
+      lcd.print("To start Podcast");
       // change with photoresistor levels later
 //      if (startBtnPressed) {
 //        currentMode = MODE_SHOW_START;
@@ -224,18 +231,20 @@ void loop() {
           if (millis() - lastSeparateTime >= 1000) {
               totalSeparateTime--;
               lastSeparateTime += 1000;
-              lcd.setCursor(0,1);
-              display(totalSeparateTime);
+//              lcd.setCursor(0,1);
+//              display(totalSeparateTime);
               Serial.print("separate timeLeft: ");
               Serial.println(totalSeparateTime);
           }
         }
+        clean();
         currentMode = MODE_SHOW_START; // After the threshold seconds, start the show 
       }
       
       // Go to Explore Mode
       if (skipBtnPressed) {
         Serial.println("SKIP button pressed");
+        clean();
         currentMode = MODE_EXPLORE_PAST;
       }
       break;
@@ -243,12 +252,15 @@ void loop() {
     case MODE_SHOW_START: {
       //Serial.println("MODE_SHOW_START");
       lcd.setCursor(0,0);
-      lcd.print("MODE_SHOW_START");
+//      lcd.print("MODE_SHOW_START");
+      lcd.print("Welcome to the");
+      lcd.setCursor(0,1);
+      lcd.print("GreatfulPodcast");
 
       // PLAY AUDIO MECHANISM 
 //      audio.play("/Audio/INTRO.wav");
 //      audio.play("/Audio/INTRO1.wav");
-      audio.play("INTRO1.wav");
+      audio.play("INTRO2.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         //Serial.println(audioIsPlaying);
@@ -264,7 +276,9 @@ void loop() {
           Serial.println("SKIPBTN btn pressed");
           audio.disable();
           while (!skipBtnPressed);
-          currentMode = MODE_REPLAY_PAST;
+          totalSeparateTime = 3;
+          clean();
+          currentMode = MODE_IDLE; // cancel show
           delay(200);
           break;
         }
@@ -288,6 +302,7 @@ void loop() {
         // when the intro audio finishes playing
           if (!audioIsPlaying) {
             Serial.println("audio is finished, time to switch modes");
+            clean();
             currentMode = MODE_REPLAY_PAST;
             delay(200);
             break;
@@ -297,7 +312,10 @@ void loop() {
     }
     case MODE_REPLAY_PAST: {
       lcd.setCursor(0,0);
-      lcd.print("MODE_REPLAY_PAST");
+//      lcd.print("MODE_REPLAY_PAST");
+      lcd.print("Replaying Your");
+      lcd.setCursor(0,1);
+      lcd.print("Message...");
 
       // PLAY AUDIO MECHANISM 
 //      audio.play("FUTURE.wav");
@@ -323,7 +341,9 @@ void loop() {
           Serial.println("SKIPBTN btn pressed");
           audio.disable();
           while (!skipBtnPressed);
-          currentMode = MODE_HOST_ASK;
+          totalSeparateTime = 3;
+          clean();
+          currentMode = MODE_IDLE; // cancel show
           delay(200);
           break;
         }
@@ -347,6 +367,7 @@ void loop() {
         // when the intro audio finishes playing
           if (!audioIsPlaying) {
             Serial.println("audio is finished, time to switch modes");
+            clean();
             currentMode = MODE_HOST_ASK;
             delay(200);
             break;
@@ -356,10 +377,13 @@ void loop() {
     }
     case MODE_HOST_ASK: {
       lcd.setCursor(0,0);
-      lcd.print("MODE_HOST_ASK");
+//      lcd.print("MODE_HOST_ASK");
+      lcd.print("How are you");
+      lcd.setCursor(0,1);
+      lcd.print("today?");
       // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
 //      audio.play("/Audio/TODAY1.wav"); // Host asks audio
-      audio.play("TODAY1.wav");
+      audio.play("TODAY2.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -376,7 +400,9 @@ void loop() {
           audio.disable();
           while (!skipBtnPressed);
           timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
-          currentMode = MODE_SHOW_SPEAK;
+          totalSeparateTime = 3;
+          clean();
+          currentMode = MODE_IDLE; // cancel show
           delay(200);
           break;
         }
@@ -402,6 +428,7 @@ void loop() {
           Serial.println("audio is finished, time to switch to LEAVE FUTURE");
 //          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
           timeLeft = calculateTime(0, 0, 30);
+          clean();
           currentMode = MODE_SHOW_SPEAK;
           delay(200);
           break;
@@ -411,29 +438,37 @@ void loop() {
     }
     case MODE_SHOW_SPEAK: { //talk for 5 minutes;
       lcd.setCursor(0,0);
-      lcd.print("MODE_SHOW_SPEAK");
+//      lcd.print("MODE_SHOW_SPEAK");
+      lcd.print("Time left:");
       // counting down
       lastTime = millis();
+      audio.play("INTRO.wav"); // change to background music for 2 minutes
       while (timeLeft > 0) {
         if (millis() - lastTime >= 1000) {
             timeLeft--;
             lastTime += 1000;
             display(timeLeft);
+//            lcd.setCursor(0,1);0 
+//            lcd.print("                            ");
             Serial.print("timeLeft: ");
             Serial.println(timeLeft);
         }
       }
       // Change to 5 minute timer countdown
       // When time runs out, go to the next mode
+      clean();
       currentMode = MODE_ASK_FUTURE;
       break;
     }
     case MODE_ASK_FUTURE: {
       lcd.setCursor(0,0);
-      lcd.print("MODE_ASK_FUTURE");
+//      lcd.print("MODE_ASK_FUTURE");
+      lcd.print("Hopes for");
+      lcd.setCursor(0,1);
+      lcd.print("tomorrow?");
       // PLAY AUDIO THAT ASKS WHAT DO U WANNA SAY TO UR FUTURE SELF
 //      audio.play("/Audio/LEAVE1.wav");
-      audio.play("LEAVE1.wav");
+      audio.play("LEAVE2.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
         // Serial.println(audioIsPlaying);
@@ -450,6 +485,7 @@ void loop() {
           audio.disable();
           while (!skipBtnPressed);
           timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
+          clean();
           currentMode = MODE_LEAVE_FUTURE;
           delay(200);
           break;
@@ -476,6 +512,7 @@ void loop() {
           Serial.println("audio is finished, time to switch to LEAVE FUTURE");
 //          timeLeft = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
           timeLeft = calculateTime(0, 0, 30);
+          clean();
           currentMode = MODE_LEAVE_FUTURE;
           delay(200);
           break;
@@ -487,7 +524,8 @@ void loop() {
       // User leaves message for future self
       //Serial.println("MODE_SHOW_FUTURE");
       lcd.setCursor(0,0);
-      lcd.print("MODE_LEAVE_FUTURE");
+//      lcd.print("MODE_LEAVE_FUTURE");
+      lcd.print("Recording...");
       
       // 1 minute timer countdown
       // counting down
@@ -517,6 +555,7 @@ void loop() {
             display(timeLeft);
             Serial.print("timeLeft: ");
             Serial.println(timeLeft);
+//            clean();
         }
       }
       Serial.print("recordTime: ");
@@ -524,6 +563,7 @@ void loop() {
       recordTime = 0;
       
       // When time runs out, go to the next mode
+      clean();
       currentMode = MODE_TALK_OUTRO;
       break;
     }
@@ -531,10 +571,13 @@ void loop() {
       // Play the host's voice
       //Serial.println("MODE_TALK_OUTRO");
       lcd.setCursor(0,0);
-      lcd.print("MODE_TALK_OUTRO");
+//      lcd.print("MODE_TALK_OUTRO");
+      lcd.print("This is the end");
+      lcd.setCursor(0,1);
+      lcd.print("of the show!");
       // PLAY OUTRO AUDIO
 //      audio.play("/Audio/OUTRO1.wav");
-      audio.play("OUTRO1.wav");
+      audio.play("OUTRO2.wav");
 //      audio.play("/Audio/OUTROHOST.wav");
       while (!startBtnPressed || !skipBtnPressed) {
         audioIsPlaying = audio.isPlaying(); 
@@ -552,6 +595,8 @@ void loop() {
           Serial.println("SKIPBTN btn pressed");
           audio.disable();
           while (!skipBtnPressed);
+          totalSeparateTime = 3;
+          clean();
           currentMode = MODE_IDLE;
           delay(200);
           break;
@@ -578,6 +623,21 @@ void loop() {
           Serial.println("audio is finished, time to switch modes");
           lastTime = calculateTime(0, LEAVE_MESSAGE_MINUTES, 0); //set leaving message time to 1 minute
           cur++; // add to the amount of files available
+
+          // Time to put back item
+          lastPutTime = millis();
+          timePutLeft = 8; // 8 seconds to put back
+          while (timePutLeft > 0) {
+             if (millis() - lastPutTime >= 1000) {
+                  timePutLeft--;
+                  lastPutTime += 1000;
+                  display(timeLeft);
+                  Serial.print("timePutLeft: ");
+                  Serial.println(timePutLeft);
+              }
+            }
+          totalSeparateTime = 3;
+          clean();
           currentMode = MODE_IDLE;
           delay(200);
           break;
@@ -591,7 +651,9 @@ void loop() {
 //      Serial.print("Cur: ");
 //      Serial.println(cur);
       int curVal = counter % cur; 
-      lcd.setCursor(0, 0);
+      lcd.setCursor(0,0);
+      lcd.print("Explore the Past");
+      lcd.setCursor(0, 1);
       String str = "PAST ENTRY " + String(curVal) + "          ";
       lcd.print(str);
 //        lcd.print(str);
@@ -611,6 +673,15 @@ void loop() {
 //        String str = "PAST ENTRY " + String(curVal) + "          ";
 //        lcd.print(str);
 //      }
+
+        // if skip is pressed, go back to gratitude mode
+        if (skipBtnPressed) {
+          totalSeparateTime = 3;
+          clean();
+            currentMode = MODE_IDLE;
+            delay(200);
+            break;
+        } 
 
       // if the start button is pressed
       if (startBtnPressed) {
@@ -632,6 +703,7 @@ void loop() {
             Serial.println("SKIPBTN btn pressed");
             audio.disable();
             while (!skipBtnPressed);
+              clean();
 //            currentMode = MODE_IDLE;
             delay(200);
             break;
@@ -1234,4 +1306,11 @@ void stopRecordFile(int num) {
       break;
     }
   }
+}
+
+void clean() {
+  lcd.setCursor(0,0);
+  lcd.print("                       ");
+  lcd.setCursor(0,1);
+  lcd.print("                       ");
 }
